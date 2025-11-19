@@ -1,0 +1,14 @@
+version: '3'
+services:
+  backend:
+    build: .
+    container_name: trip-backend
+    ports:
+      - "5050:5000"
+    volumes:
+      # [중요] 로컬의 data 폴더와 컨테이너 내부 data 폴더를 연결(Sync)
+      # 컨테이너가 꺼져도 엑셀 파일 데이터가 날아가지 않게 함
+      - ./data:/app/data
+    restart: always
+    environment:
+      - PYTHONUNBUFFERED=1
