@@ -12,7 +12,7 @@ app = Flask(__name__)
 app.secret_key = 'saegil-portal-secret-key-!@#$' 
 
 # CORS 설정 (React 포트 3000번 허용 + 세션 쿠키 허용)
-CORS(app, origins=["http://localhost:3000", "https://saegil.life"], supports_credentials=True)
+CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
 
 # --- 상수 정의 ---
 DATA_DIR = 'data'
