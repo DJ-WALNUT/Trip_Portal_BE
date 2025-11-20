@@ -1,7 +1,7 @@
 import os
 import sys
 import pandas as pd
-import csv  # 티저 이벤트 데이터 저장을 위한 CSV 모듈
+import csv 
 from flask import Flask, jsonify, request, session, send_file
 from flask_cors import CORS
 from datetime import datetime, timedelta, timezone
@@ -12,20 +12,25 @@ os.environ["PYTHONIOENCODING"] = "utf-8"
 app = Flask(__name__)
 app.secret_key = 'saegil-portal-secret-key-!@#$' 
 
-# CORS 설정
-CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
+# CORS 설정 (세션 쿠키 공유를 위해 supports_credentials=True 필수)
+CORS(app, origins=["http://localhost:3000", "http://localhost:5173", "https://cukeng.kr"], supports_credentials=True)
 
 # --- 상수 정의 ---
 DATA_DIR = 'data'
 STOCK_FILE = os.path.join(DATA_DIR, 'stuff_ongoing.xlsx')
 LOG_FILE = os.path.join(DATA_DIR, 'borrow_log.xlsx')
 MAJOR_FILE = os.path.join(DATA_DIR, 'major.xlsx')
-TEASER_FILE = os.path.join(DATA_DIR, 'teaser_entries.csv') # 티저 이벤트 데이터
+TEASER_FILE = os.path.join(DATA_DIR, 'teaser_entries.csv') 
 
+# [수정] 비밀번호 변경
 ADMIN_PASSWORD = 'trip0711' 
 
-# 한국 시간(KST) 설정
+# KST 설정
 KST = timezone(timedelta(hours=9))
+
+# --- 보안 헬퍼 함수 ---
+def is_admin_logged_in():
+    return session.get('is_admin', False)
 
 # --- 헬퍼 함수 ---
 def load_stock():
@@ -50,7 +55,25 @@ def save_log(df):
     df.to_excel(LOG_FILE, index=False)
 
 # ==========================
-# [신규] 티저 이벤트 API (CSV 저장)
+# [API] 관리자 인증 (로그인/로그아웃)
+# ==========================
+@app.route('/api/admin/login', methods=['POST'])
+def admin_login():
+    data = request.get_json()
+    if data.get('password') == ADMIN_PASSWORD:
+        session['is_admin'] = True
+        session.permanent = True # 브라우저 꺼도 유지할지 여부 (선택사항)
+        return jsonify({'status': 'success'})
+    else:
+        return jsonify({'status': 'fail', 'message': '비밀번호 불일치'}), 401
+
+@app.route('/api/admin/logout', methods=['POST'])
+def admin_logout():
+    session.clear() # 세션 정보 싹 지움
+    return jsonify({'status': 'success', 'message': '로그아웃 되었습니다.'})
+
+# ==========================
+# [API] 티저 이벤트
 # ==========================
 @app.route('/api/teaser/entry', methods=['POST'])
 def teaser_entry():
@@ -65,10 +88,9 @@ def teaser_entry():
         if not all([name, student_id, dept, phone, agreed]):
             return jsonify({'status': 'fail', 'message': '모든 정보를 입력해주세요.'}), 400
 
-        # 파일이 없으면 헤더 작성
         file_exists = os.path.isfile(TEASER_FILE)
         
-        # CSV Append 모드로 열기 (동시성 문제 최소화)
+        # 전화번호 앞의 0을 보존하기 위해 문자열로 저장 ('010...')
         with open(TEASER_FILE, 'a', newline='', encoding='utf-8-sig') as f:
             writer = csv.writer(f)
             if not file_exists:
@@ -80,17 +102,23 @@ def teaser_entry():
         return jsonify({'status': 'success', 'message': '응모 완료'})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
-        
-# 2. [신규] 티저 응모 목록 조회 (관리자용)
+
 @app.route('/api/admin/teaser', methods=['GET'])
 def get_teaser_entries():
+    # [보안] 관리자 아니면 튕겨냄
+    if not is_admin_logged_in(): return jsonify({'status': 'fail', 'message': 'Unauthorized'}), 401
+
     try:
         if not os.path.exists(TEASER_FILE):
              return jsonify({'status': 'success', 'data': []})
         
-        # CSV 읽어서 JSON으로 반환
-        df = pd.read_csv(TEASER_FILE)
-        # 최신순 정렬 (신청시각 기준 내림차순) - 데이터가 있을 때만
+        # [수정] 전화번호 0 살리기: dtype=str로 읽어서 숫자로 변환되는 것 방지
+        df = pd.read_csv(TEASER_FILE, dtype={'전화번호': str, '학번': str})
+        
+        # 혹시 이미 숫자로 저장되어 '101234...'로 읽혔을 경우를 대비해 '0' 붙이기
+        if not df.empty and '전화번호' in df.columns:
+            df['전화번호'] = df['전화번호'].apply(lambda x: '0' + str(x) if str(x).startswith('10') else str(x))
+
         if not df.empty:
             df = df.sort_values(by='신청시각', ascending=False)
             
@@ -99,10 +127,130 @@ def get_teaser_entries():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 # ==========================
-# [기존] 재고 관리 API (통합됨)
+# [API] 관리자 기능 (모든 함수에 보안 체크 추가)
 # ==========================
+@app.route('/api/admin/dashboard', methods=['GET'])
+def admin_dashboard():
+    if not is_admin_logged_in(): return jsonify({'status': 'fail', 'message': 'Unauthorized'}), 401
+    
+    log_df = load_log()
+    today = datetime.now(KST).strftime('%Y-%m-%d')
+    today_count = log_df[log_df['대여시각'].astype(str).str.contains(today)].shape[0]
+    recent_logs = log_df.tail(5).to_dict(orient='records')[::-1]
+    return jsonify({'status': 'success', 'today_count': today_count, 'recent_logs': recent_logs})
+
+@app.route('/api/admin/requests', methods=['GET'])
+def get_requests():
+    if not is_admin_logged_in(): return jsonify({'status': 'fail', 'message': 'Unauthorized'}), 401
+    
+    log_df = load_log()
+    log_df['id'] = log_df.index 
+    requests = log_df[log_df['대여현황'] == '신청'].copy()
+    
+    data = []
+    for _, row in requests.iterrows():
+        data.append({'id': int(row['id']), 'date': row['대여시각'], 'name': row['이름'], 'student_id': row['학번'], 'items': row['대여물품']})
+    data.reverse()
+    return jsonify({'status': 'success', 'data': data})
+
+@app.route('/api/admin/approve', methods=['POST'])
+def approve_request():
+    if not is_admin_logged_in(): return jsonify({'status': 'fail', 'message': 'Unauthorized'}), 401
+    
+    data = request.get_json()
+    log_id = data.get('id')
+    handler = data.get('handler')
+    log_df = load_log()
+    stock_df = load_stock()
+
+    if log_id < len(log_df):
+        items_str = log_df.loc[log_id, '대여물품']
+        items_list = items_str.split(', ')
+        is_all_disposable = True
+        for item_name in items_list:
+            stock_row = stock_df[stock_df['물품'] == item_name]
+            if not stock_row.empty:
+                if stock_row.iloc[0]['카테고리'] != '일회용품':
+                    is_all_disposable = False
+                    break
+            else: is_all_disposable = False
+        
+        if is_all_disposable:
+            log_df.loc[log_id, '대여현황'] = '반납완료'
+            log_df.loc[log_id, '반납시각'] = datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            log_df.loc[log_id, '대여현황'] = '미반납'
+            
+        log_df.loc[log_id, '대여담당자'] = handler
+        save_log(log_df)
+        return jsonify({'status': 'success'})
+    return jsonify({'status': 'fail'})
+
+@app.route('/api/admin/reject', methods=['POST'])
+def reject_request():
+    if not is_admin_logged_in(): return jsonify({'status': 'fail', 'message': 'Unauthorized'}), 401
+    
+    data = request.get_json()
+    log_id = data.get('id')
+    log_df = load_log()
+    stock_df = load_stock()
+
+    if log_id < len(log_df):
+        items_str = log_df.loc[log_id, '대여물품']
+        items_list = items_str.split(', ')
+        for item_name in items_list:
+            idx = stock_df.index[stock_df['물품'] == item_name].tolist()
+            if idx: stock_df.loc[idx[0], '재고현황'] += 1
+        log_df = log_df.drop(log_id).reset_index(drop=True)
+        save_stock(stock_df)
+        save_log(log_df)
+        return jsonify({'status': 'success'})
+    return jsonify({'status': 'fail'})
+
+@app.route('/api/admin/ongoing', methods=['GET'])
+def get_ongoing():
+    if not is_admin_logged_in(): return jsonify({'status': 'fail', 'message': 'Unauthorized'}), 401
+
+    log_df = load_log()
+    log_df['id'] = log_df.index
+    ongoing = log_df[log_df['대여현황'] == '미반납'].copy()
+    data = []
+    for _, row in ongoing.iterrows():
+        data.append({'id': int(row['id']), 'date': row['대여시각'], 'name': row['이름'], 'student_id': row['학번'], 'items': row['대여물품']})
+    data.reverse()
+    return jsonify({'status': 'success', 'data': data})
+
+@app.route('/api/admin/return', methods=['POST'])
+def return_item():
+    if not is_admin_logged_in(): return jsonify({'status': 'fail', 'message': 'Unauthorized'}), 401
+
+    data = request.get_json()
+    log_id = data.get('id')
+    handler = data.get('handler')
+    log_df = load_log()
+    stock_df = load_stock()
+    
+    if log_id < len(log_df):
+        items_str = log_df.loc[log_id, '대여물품']
+        items_list = items_str.split(', ')
+        for item_name in items_list:
+            idx = stock_df.index[stock_df['물품'] == item_name].tolist()
+            if idx:
+                stock_idx = idx[0]
+                category = stock_df.loc[stock_idx, '카테고리']
+                if category != '일회용품' and stock_df.loc[stock_idx, '재고현황'] != -1:
+                    stock_df.loc[stock_idx, '재고현황'] += 1
+        log_df.loc[log_id, '대여현황'] = '반납완료'
+        log_df.loc[log_id, '반납담당자'] = handler
+        log_df.loc[log_id, '반납시각'] = datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
+        save_stock(stock_df)
+        save_log(log_df)
+        return jsonify({'status': 'success'})
+    return jsonify({'status': 'fail'})
+
 @app.route('/api/admin/stock/update', methods=['POST'])
 def update_stock():
+    if not is_admin_logged_in(): return jsonify({'status': 'fail', 'message': 'Unauthorized'}), 401
     try:
         data = request.get_json()
         new_items = data.get('items')
@@ -114,12 +262,12 @@ def update_stock():
 
 @app.route('/api/admin/stock/add', methods=['POST'])
 def add_stock_item():
+    if not is_admin_logged_in(): return jsonify({'status': 'fail', 'message': 'Unauthorized'}), 401
     try:
         data = request.get_json()
         name = data.get('name')
         count = data.get('count')
         category = data.get('category') or '반납물품'
-
         stock_df = load_stock()
         new_row = {'물품': name, '재고현황': count, '카테고리': category}
         stock_df = pd.concat([stock_df, pd.DataFrame([new_row])], ignore_index=True)
@@ -130,6 +278,7 @@ def add_stock_item():
 
 @app.route('/api/admin/stock/delete', methods=['POST'])
 def delete_stock_item():
+    if not is_admin_logged_in(): return jsonify({'status': 'fail', 'message': 'Unauthorized'}), 401
     try:
         data = request.get_json()
         name = data.get('name')
@@ -140,9 +289,21 @@ def delete_stock_item():
     except Exception as e:
         return jsonify({'status': 'fail', 'message': str(e)})
 
-# ==========================
-# [기존] 사용자/관리자 API
-# ==========================
+@app.route('/api/admin/logs', methods=['GET'])
+def get_all_logs():
+    if not is_admin_logged_in(): return jsonify({'status': 'fail', 'message': 'Unauthorized'}), 401
+    log_df = load_log()
+    data = log_df.to_dict(orient='records')[::-1]
+    return jsonify({'status': 'success', 'data': data})
+
+@app.route('/api/admin/download_log', methods=['GET'])
+def download_log_file():
+    if not is_admin_logged_in(): return "로그인이 필요합니다.", 401
+    if os.path.exists(LOG_FILE):
+        return send_file(LOG_FILE, as_attachment=True)
+    return "파일이 없습니다.", 404
+
+# --- 일반 사용자용 API (로그인 필요 없음) ---
 @app.route('/api/items', methods=['GET'])
 def get_items():
     try:
@@ -169,27 +330,16 @@ def borrow_item():
     selected_items = data.get('selected_items', []) 
     stock_df = load_stock()
     log_df = load_log()
-    
     for item_name in selected_items:
         idx = stock_df.index[stock_df['물품'] == item_name].tolist()
-        if not idx:
-            return jsonify({'status': 'fail', 'message': f'{item_name} 없는 물품입니다.'})
+        if not idx: return jsonify({'status': 'fail', 'message': f'{item_name} 없는 물품입니다.'})
         stock_idx = idx[0]
-        if stock_df.loc[stock_idx, '재고현황'] <= 0:
-             return jsonify({'status': 'fail', 'message': f'{item_name} 재고가 부족합니다.'})
+        if stock_df.loc[stock_idx, '재고현황'] <= 0: return jsonify({'status': 'fail', 'message': f'{item_name} 재고가 부족합니다.'})
         stock_df.loc[stock_idx, '재고현황'] -= 1
-
     new_log = {
-        '이름': data.get('name'),
-        '전화번호': data.get('phone'),
-        '학번': data.get('student_id'),
-        '학과': data.get('department'),
-        '대여물품': ", ".join(selected_items),
-        '대여담당자': '', 
-        '대여시각': datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S'),
-        '대여현황': '신청',
-        '반납담당자': '',
-        '반납시각': ''
+        '이름': data.get('name'), '전화번호': data.get('phone'), '학번': data.get('student_id'), '학과': data.get('department'),
+        '대여물품': ", ".join(selected_items), '대여담당자': '', '대여시각': datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S'),
+        '대여현황': '신청', '반납담당자': '', '반납시각': ''
     }
     log_df = pd.concat([log_df, pd.DataFrame([new_log])], ignore_index=True)
     save_stock(stock_df)
@@ -203,167 +353,16 @@ def check_status():
     student_id = data.get('student_id')
     log_df = load_log()
     matches = log_df[(log_df['이름'] == name) & (log_df['학번'] == student_id)].copy()
-    if matches.empty:
-        return jsonify({'status': 'fail', 'message': '기록이 없습니다.'})
-
+    if matches.empty: return jsonify({'status': 'fail', 'message': '기록이 없습니다.'})
     result_list = []
     for _, row in matches.iterrows():
         try:
             borrow_dt = datetime.strptime(str(row['대여시각']), '%Y-%m-%d %H:%M:%S')
             due_date = (borrow_dt + timedelta(days=7)).strftime('%Y-%m-%d')
-        except:
-            due_date = '-'
-        result_list.append({
-            'items': row['대여물품'],
-            'date': str(row['대여시각']),
-            'status': row['대여현황'],
-            'due_date': due_date
-        })
+        except: due_date = '-'
+        result_list.append({'items': row['대여물품'], 'date': str(row['대여시각']), 'status': row['대여현황'], 'due_date': due_date})
     result_list.reverse()
     return jsonify({'status': 'success', 'data': result_list, 'user_info': {'name': name, 'student_id': student_id}})
-
-@app.route('/api/admin/login', methods=['POST'])
-def admin_login():
-    data = request.get_json()
-    if data.get('password') == ADMIN_PASSWORD:
-        session['is_admin'] = True
-        return jsonify({'status': 'success'})
-    else:
-        return jsonify({'status': 'fail', 'message': '비밀번호 불일치'}), 401
-
-@app.route('/api/admin/dashboard', methods=['GET'])
-def admin_dashboard():
-    log_df = load_log()
-    today = datetime.now(KST).strftime('%Y-%m-%d')
-    today_count = log_df[log_df['대여시각'].astype(str).str.contains(today)].shape[0]
-    recent_logs = log_df.tail(5).to_dict(orient='records')[::-1]
-    return jsonify({'status': 'success', 'today_count': today_count, 'recent_logs': recent_logs})
-
-@app.route('/api/admin/requests', methods=['GET'])
-def get_requests():
-    log_df = load_log()
-    log_df['id'] = log_df.index 
-    requests = log_df[log_df['대여현황'] == '신청'].copy()
-    data = []
-    for _, row in requests.iterrows():
-        data.append({
-            'id': int(row['id']),
-            'date': row['대여시각'],
-            'name': row['이름'],
-            'student_id': row['학번'],
-            'items': row['대여물품']
-        })
-    data.reverse()
-    return jsonify({'status': 'success', 'data': data})
-
-@app.route('/api/admin/approve', methods=['POST'])
-def approve_request():
-    data = request.get_json()
-    log_id = data.get('id')
-    handler = data.get('handler')
-    log_df = load_log()
-    stock_df = load_stock()
-
-    if log_id < len(log_df):
-        items_str = log_df.loc[log_id, '대여물품']
-        items_list = items_str.split(', ')
-        is_all_disposable = True
-        for item_name in items_list:
-            stock_row = stock_df[stock_df['물품'] == item_name]
-            if not stock_row.empty:
-                if stock_row.iloc[0]['카테고리'] != '일회용품':
-                    is_all_disposable = False
-                    break
-            else:
-                is_all_disposable = False
-        
-        if is_all_disposable:
-            log_df.loc[log_id, '대여현황'] = '반납완료'
-            log_df.loc[log_id, '반납시각'] = datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
-        else:
-            log_df.loc[log_id, '대여현황'] = '미반납'
-            
-        log_df.loc[log_id, '대여담당자'] = handler
-        save_log(log_df)
-        return jsonify({'status': 'success'})
-    return jsonify({'status': 'fail'})
-
-@app.route('/api/admin/reject', methods=['POST'])
-def reject_request():
-    data = request.get_json()
-    log_id = data.get('id')
-    log_df = load_log()
-    stock_df = load_stock()
-
-    if log_id < len(log_df):
-        items_str = log_df.loc[log_id, '대여물품']
-        items_list = items_str.split(', ')
-        for item_name in items_list:
-            idx = stock_df.index[stock_df['물품'] == item_name].tolist()
-            if idx:
-                stock_df.loc[idx[0], '재고현황'] += 1
-        
-        log_df = log_df.drop(log_id).reset_index(drop=True)
-        save_stock(stock_df)
-        save_log(log_df)
-        return jsonify({'status': 'success'})
-    return jsonify({'status': 'fail'})
-
-@app.route('/api/admin/ongoing', methods=['GET'])
-def get_ongoing():
-    log_df = load_log()
-    log_df['id'] = log_df.index
-    ongoing = log_df[log_df['대여현황'] == '미반납'].copy()
-    data = []
-    for _, row in ongoing.iterrows():
-        data.append({
-            'id': int(row['id']),
-            'date': row['대여시각'],
-            'name': row['이름'],
-            'student_id': row['학번'],
-            'items': row['대여물품']
-        })
-    data.reverse()
-    return jsonify({'status': 'success', 'data': data})
-
-@app.route('/api/admin/return', methods=['POST'])
-def return_item():
-    data = request.get_json()
-    log_id = data.get('id')
-    handler = data.get('handler')
-    log_df = load_log()
-    stock_df = load_stock()
-    
-    if log_id < len(log_df):
-        items_str = log_df.loc[log_id, '대여물품']
-        items_list = items_str.split(', ')
-        for item_name in items_list:
-            idx = stock_df.index[stock_df['물품'] == item_name].tolist()
-            if idx:
-                stock_idx = idx[0]
-                category = stock_df.loc[stock_idx, '카테고리']
-                if category != '일회용품' and stock_df.loc[stock_idx, '재고현황'] != -1:
-                    stock_df.loc[stock_idx, '재고현황'] += 1
-
-        log_df.loc[log_id, '대여현황'] = '반납완료'
-        log_df.loc[log_id, '반납담당자'] = handler
-        log_df.loc[log_id, '반납시각'] = datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
-        save_stock(stock_df)
-        save_log(log_df)
-        return jsonify({'status': 'success'})
-    return jsonify({'status': 'fail'})
-
-@app.route('/api/admin/logs', methods=['GET'])
-def get_all_logs():
-    log_df = load_log()
-    data = log_df.to_dict(orient='records')[::-1]
-    return jsonify({'status': 'success', 'data': data})
-
-@app.route('/api/admin/download_log', methods=['GET'])
-def download_log_file():
-    if os.path.exists(LOG_FILE):
-        return send_file(LOG_FILE, as_attachment=True)
-    return "파일이 없습니다.", 404
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
