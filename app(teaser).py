@@ -324,6 +324,7 @@ def get_ongoing():
             'date': row['대여시각'],
             'name': row['이름'],
             'student_id': row['학번'],
+            'phone': row['전화번호'],
             'items': row['대여물품']
         })
     data.reverse()
@@ -362,10 +363,24 @@ def get_all_logs():
     data = log_df.to_dict(orient='records')[::-1]
     return jsonify({'status': 'success', 'data': data})
 
+# ==========================
+# [수정] 엑셀 다운로드 API (파일명 + 시각 설정)
+# ==========================
 @app.route('/api/admin/download_log', methods=['GET'])
 def download_log_file():
     if os.path.exists(LOG_FILE):
-        return send_file(LOG_FILE, as_attachment=True)
+        # 1. 현재 시간(KST) 구하기
+        timestamp = datetime.now(KST).strftime('%Y%m%d_%H%M%S')
+        
+        # 2. 파일명 생성 (예: 대여반납기록_20251121_123000.xlsx)
+        custom_filename = f"대여반납기록_{timestamp}.xlsx"
+        
+        # 3. 파일 전송 (download_name 옵션 사용)
+        return send_file(
+            LOG_FILE, 
+            as_attachment=True, 
+            download_name=custom_filename
+        )
     return "파일이 없습니다.", 404
 
 if __name__ == '__main__':
