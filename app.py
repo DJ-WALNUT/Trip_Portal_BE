@@ -19,7 +19,7 @@ DATA_DIR = 'data'
 STOCK_FILE = os.path.join(DATA_DIR, 'stuff_ongoing.xlsx')
 LOG_FILE = os.path.join(DATA_DIR, 'borrow_log.xlsx')
 MAJOR_FILE = os.path.join(DATA_DIR, 'major.xlsx') # 학과 정보 등
-ADMIN_PASSWORD = 'saegil0924'
+ADMIN_PASSWORD = 'trip0711'
 
 # --- 헬퍼 함수 (기존 로직 유지) ---
 def load_stock():
