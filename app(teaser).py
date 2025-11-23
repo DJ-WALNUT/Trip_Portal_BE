@@ -5,12 +5,18 @@ import csv  # 티저 이벤트 데이터 저장을 위한 CSV 모듈
 from flask import Flask, jsonify, request, session, send_file
 from flask_cors import CORS
 from datetime import datetime, timedelta, timezone
+from dotenv import load_dotenv  # [추가] 환경변수 로드 모듈
+
+# --- 환경 변수 로드 ---
+load_dotenv()  # .env 파일을 찾아서 로드합니다.
 
 # --- 기본 설정 ---
 os.environ["PYTHONIOENCODING"] = "utf-8"
 
 app = Flask(__name__)
-app.secret_key = 'saegil-portal-secret-key-!@#$' 
+
+# [수정] .env에서 가져오기 (없을 경우를 대비해 두 번째 인자에 기본값 설정 가능)
+app.secret_key = os.getenv('FLASK_SECRET_KEY', 'default-secret-key') 
 
 # CORS 설정
 CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
@@ -20,9 +26,10 @@ DATA_DIR = 'data'
 STOCK_FILE = os.path.join(DATA_DIR, 'stuff_ongoing.xlsx')
 LOG_FILE = os.path.join(DATA_DIR, 'borrow_log.xlsx')
 MAJOR_FILE = os.path.join(DATA_DIR, 'major.xlsx')
-TEASER_FILE = os.path.join(DATA_DIR, 'teaser_entries.csv') # 티저 이벤트 데이터
+TEASER_FILE = os.path.join(DATA_DIR, 'teaser_entries.csv')
 
-ADMIN_PASSWORD = 'trip0711' 
+# [수정] 비밀번호를 환경 변수에서 가져옴
+ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD') 
 
 # 한국 시간(KST) 설정
 KST = timezone(timedelta(hours=9))
