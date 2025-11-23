@@ -10,5 +10,8 @@ services:
       # 컨테이너가 꺼져도 엑셀 파일 데이터가 날아가지 않게 함
       - ./data:/app/data
     restart: always
+    # [추가됨] 로컬에 있는 .env 파일을 컨테이너가 읽을 수 있게 등록
+    env_file:
+      - .env
     environment:
       - PYTHONUNBUFFERED=1
