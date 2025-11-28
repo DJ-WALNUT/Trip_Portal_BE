@@ -1,6 +1,8 @@
 flask
 flask-cors
 flask-limiter
+flask-sqlalchemy
 pandas
 openpyxl
 python-dotenv
+requests
