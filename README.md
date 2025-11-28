@@ -1,10 +1,11 @@
 ## ✈️ 가톨릭대 4대 공과대학 학생회 [여정] 포털 (Backend)
 
-가톨릭대학교 공과대학 학생회 **여정**의 홈페이지 및 물품 대여 웹 서비스 백엔드 API 레포지토리입니다.
-별도의 복잡한 데이터베이스 구축 없이 **Excel(Pandas) 및 CSV 파일**을 DB로 활용하여 유지보수 편의성을 극대화하였으며, **React SPA(Single Page Application) 정적 파일을 통합 서빙**할 수 있도록 설계되었습니다.
+가톨릭대학교 공과대학 학생회 **여정**의 통합 포털 웹 서비스 백엔드 API 레포지토리입니다.
+기존의 유연한 **Excel/CSV 데이터 처리** 장점을 유지하면서, **SQLite(SQLAlchemy)**를 도입하여 공지사항 및 게시판 데이터의 안정적인 트랜잭션 관리를 구현하였습니다.
 
 [![Python](https://img.shields.io/badge/Python-3.9+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-3.0+-000000?style=flat-square&logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
+[![SQLite](https://img.shields.io/badge/SQLite-Database-003B57?style=flat-square&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
 [![Pandas](https://img.shields.io/badge/Pandas-Data_Processing-150458?style=flat-square&logo=pandas&logoColor=white)](https://pandas.pydata.org/)</br>
 [![Synology](https://img.shields.io/badge/Synology_NAS-Deployment-B0B3B8?style=flat-square&logo=synology&logoColor=white)](https://www.synology.com/)
 [![Docker](https://img.shields.io/badge/Docker-Container-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com/)
@@ -12,31 +13,72 @@
 ### ✨ 주요 기능
 
 #### 🌐 서버 및 공통 (Server & Common)
-- **Excel & CSV Database**: `pandas`와 `csv` 모듈을 활용하여 파일을 직접 읽고 쓰는 방식으로 데이터 영속성 관리.
-- **SPA 라우팅 지원**: React 빌드 결과물(`static`)을 Flask에서 직접 서빙하며, API가 아닌 모든 요청을 `index.html`로 리다이렉트하여 404 에러 방지.
-- **타임존 처리 (KST)**: 서버/Docker 환경에 구애받지 않고 한국 시간(UTC+9) 기준으로 정확한 로그 타임스탬프 기록.
+- **Hybrid Database**: 
+  - **SQLite**: 공지사항, 학사일정 등 구조화된 데이터 및 관계형 데이터 관리.
+  - **Excel/CSV**: 물품 재고, 대여 로그 등 레거시 데이터 및 엑셀 다운로드 기능 지원.
+- **Modular Architecture**: `Blueprint`를 활용하여 기능별(공지사항, 인스타, 대여 등)로 라우트 및 로직 분리.
+- **Rate Limiting**: `Flask-Limiter`를 적용하여 매크로 및 무분별한 API 호출 방지.
+- **Security**: `.env`를 통한 환경변수 관리 및 관리자 세션 기반 인증.
 
-#### 👤 사용자 (User)
-- **물품 대여 시스템**: 실시간 재고 확인 및 대여 신청 (이름, 학번, 학과, 연락처 기반).
-- **티저 이벤트**: 축제/행사 기대평 작성 및 응모 기능 (CSV 기반 별도 격리 저장).
-- **개인 조회**: 별도 회원가입 없이 본인의 대여 현황 및 반납 기한(D-Day) 조회.
+#### 📢 게시판 및 정보 (Board & Info)
+- **공지사항 관리 (CMS)**: 
+  - 서식 있는 텍스트 및 **다중 파일 업로드** 지원 (폴더 기반 격리 저장).
+  - **공개/비공개(임시저장)** 설정 및 상단 고정(Pin) 기능.
+  - 조회수 중복 방지 로직 적용.
+- **인스타그램 연동**: Instagram Graph API를 활용하여 최신 게시물 피드 자동 동기화.
+- **학사일정 (D-Day)**: 주요 학사 일정을 DB화하여 메인 페이지 D-Day 자동 계산 제공.
+
+#### 👤 사용자 (User) - 물품 대여
+- **물품 대여 시스템**: 실시간 재고 확인 및 대여 신청.
+- **티저 이벤트**: 축제/행사 기대평 작성 및 응모 (CSV 격리 저장).
+- **개인 조회**: 본인의 대여 현황 및 반납 기한 조회.
 
 #### ⚙️ 관리자 (Admin)
-- **대시보드**: 금일 대여 건수 요약 및 최근 로그(5건) 프리뷰 제공.
-- **스마트 반납 로직**:
-  - **일회용품 자동 처리**: 승인 시 재고 차감 없이 상태만 변경.
-  - **비품 재고 관리**: 반납 처리 시에만 물리적 재고 수량(+1) 자동 복구.
-- **로그 다운로드**: 전체 대여/반납 이력을 **현재 시각이 포함된 파일명**의 엑셀 파일로 다운로드.
+- **통합 대시보드**: 대여 현황 요약 및 최근 로그 프리뷰.
+- **게시물 관리**: 공지사항 작성, 수정, 삭제 및 첨부파일 관리.
+- **스마트 반납 로직**: 일회용품 자동 처리 및 비품 재고 자동 복구.
+- **로그 다운로드**: 대여/반납 이력을 타임스탬프가 포함된 엑셀 파일로 추출.
+
+---
 
 ### 🛠️ 기술 스택 (Tech Stack)
-- **Language**: Python 3.9
-- **Framework**: Flask
+- **Language**: Python 3.9+
+- **Framework**: Flask, Flask-SQLAlchemy
 - **Data Handling**: Pandas, OpenPyXL, CSV
+- **Security**: Flask-Limiter, Dotenv
 - **Deployment**: Docker, Docker Compose
+
+---
+
+### 📂 프로젝트 구조 (Directory Structure)
+
+```text
+backend/
+├── data/                  # 엑셀/CSV 데이터 (재고, 로그, 학과정보)
+├── uploads/               # 공지사항 첨부파일 (업로드 시 ID별 폴더 생성)
+├── routes/                # API 라우트 (Blueprint)
+│   ├── notice_routes.py   # 공지사항 API
+│   ├── instagram_routes.py# 인스타그램 API
+│   └── ...
+├── models.py              # DB 모델 정의 (SQLAlchemy)
+├── extensions.py          # 공용 모듈 (Limiter, Login Decorator)
+├── app.py                 # 앱 엔트리 포인트 & 설정
+├── requirements.txt       # 의존성 패키지 목록
+└── database.db            # SQLite 데이터베이스 파일 (자동 생성)
+```
 
 ### 🚀 설치 및 실행 (Installation)
 
-#### 로컬 환경 (Local)
+#### 1. 환경 변수 설정 (.env)
+프로젝트 루트에 `.env`파일을 생성하고 아래 내용을 입력해야 합니다.
+```Ini, TOML
+FLASK_SECRET_KEY=your_secret_key
+ADMIN_PASSWORD=your_admin_password
+INSTAGRAM_ACCESS_TOKEN=your_instagram_token
+INSTAGRAM_USER_ID=your_user_id
+```
+
+#### 2. 로컬 실행 (Local)
 ```bash
 # 1. 가상환경 생성 및 활성화
 python -m venv venv
@@ -51,27 +93,24 @@ python app.py
 ```
 
 #### 도커 배포 (Docker Deployment)
-시놀로지 Container Manager 또는 일반 Docker 환경에서 배포합니다.
+데이터 영속성을 위해 `data/`, `uploads/`, `database.db`가 위치한 경로를 반드시 볼륨 마운트해야 합니다.
 1. 이미지 빌드 및 실행
 ```bash
 docker-compose up -d --build
 ```
 2. 설정 확인 : `docker-compose.yml`에서 포트(기본 5050) 및 볼륨 마운트 설정을 확인하세요.
 
-### 📂 데이터 관리 (Data Structure)
-
-이 프로젝트는 `data/` 폴더 내의 엑셀 파일을 DB로 사용합니다.
-서버 재시작 시 데이터 유실을 방지하기 위해 **Docker Volume** 설정이 필수적입니다.
-
-|파일명|설명|
-|:---|:---|
-|`stuff_ongoing.xlsx`|현재 물품 재고 현황 및 카테고리(반납물품/일회용품) 정보|
-|`borrow_log.xlsx`|대여 신청, 승인, 반납 등 모든 이력 로그|
-|`major.xlsx`|학과 목록 데이터 (신청 페이지 드롭다운 연동)|
-
-### 🔧 API 엔드포인트 요약
+### 🔧 API 엔드포인트
 |구분|Method|Endpoint|비고|
 |:---|:---|:---|:---|
+|공지사항|`GET`|`/api/notices`|공지사항 목록 조회 (옵션: `include_private`)|
+||`GET`|`/api/notices/<id>`|상세 조회 (옵션: `increment`)|
+||`POST`|`/api/notices`|공지사항 등록 (Multipart/form-data)|
+||`PUT`|`/api/notices/<id>`|공지사항 수정|
+||`DELETE`|`/api/notices/<id>`|공지사항 삭제|
+||`GET`|`/api/notices/download/...`|첨부파일 다운로드|
+|SNS|`GET`|`/api/instagram/posts`|인스타그램 최신 피드 조회|
+|일정|`GET`|`/api/schedule`|학사일정 데이터 조회|
 |공통|`GET`|`/api/items`|전체 물품 및 재고 조회|
 ||`GET`|`/api/departments`|학과 목록 조회|
 |사용자|`POST`|`/api/borrow`|물품 대여 신청|
