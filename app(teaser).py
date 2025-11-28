@@ -6,9 +6,14 @@ from flask import Flask, jsonify, request, session, send_file
 from flask_cors import CORS
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv  # [추가] 환경변수 로드 모듈
+from threading import Lock # [추가] 스레드 안전성을 위한 Lock
+from functools import wraps
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 # --- 환경 변수 로드 ---
 load_dotenv()  # .env 파일을 찾아서 로드합니다.
+data_lock = Lock()  # 데이터 접근 시 사용할 Lock 객체
 
 # --- 기본 설정 ---
 os.environ["PYTHONIOENCODING"] = "utf-8"
@@ -19,7 +24,13 @@ app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'default-secret-key') 
 
 # CORS 설정
-CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
+allowed_origins = [
+    "http://localhost:3000",             # 로컬 개발용
+    "http://localhost:5173",             # 로컬 개발용
+    "http://localhost:5174",             # 로컬 개발용
+    "https://cukeng.kr"                  # 여정 도메인
+]
+CORS(app, resources={r"/api/*": {"origins": allowed_origins}}, supports_credentials=True)
 
 # --- 상수 정의 ---
 DATA_DIR = 'data'
@@ -34,7 +45,24 @@ ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD')
 # 한국 시간(KST) 설정
 KST = timezone(timedelta(hours=9))
 
+# Rate Limiter 설정 (IP 주소 기준 제한)
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"], # 기본 제한
+    storage_uri="memory://" # 간단하게 메모리에 저장
+)
+
 # --- 헬퍼 함수 ---
+def login_required(f): # [보안] 관리자 로그인 확인 데코레이터
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # 세션에 is_admin이 없거나 False이면 401 에러 반환
+        if not session.get('is_admin'):
+            return jsonify({'status': 'fail', 'message': '로그인이 필요합니다.'}), 401
+        return f(*args, **kwargs)
+    return decorated_function
+
 def load_stock():
     if not os.path.exists(STOCK_FILE):
         return pd.DataFrame(columns=['물품', '재고현황', '카테고리'])
@@ -56,17 +84,24 @@ def load_log():
 def save_log(df):
     df.to_excel(LOG_FILE, index=False)
 
+# [보안] 엑셀 인젝션 방지 함수 (입력값 맨 앞이 =, +, -, @ 이면 ' 붙이기)
+def sanitize_input(value):
+    if isinstance(value, str) and value.startswith(('=', '+', '-', '@')):
+        return "'" + value
+    return value
+
 # ==========================
 # [신규] 티저 이벤트 API (CSV 저장)
 # ==========================
 @app.route('/api/teaser/entry', methods=['POST'])
+@limiter.limit("5 per minute")
 def teaser_entry():
     try:
         data = request.get_json()
-        name = data.get('name')
-        student_id = data.get('student_id')
-        dept = data.get('department')
-        phone = data.get('phone')
+        name = sanitize_input(data.get('name'))
+        student_id = sanitize_input(data.get('student_id'))
+        dept = sanitize_input(data.get('department'))
+        phone = sanitize_input(data.get('phone'))
         agreed = data.get('agreed')
 
         if not all([name, student_id, dept, phone, agreed]):
@@ -89,6 +124,7 @@ def teaser_entry():
         
 # 2. [신규] 티저 응모 목록 조회 (관리자용)
 @app.route('/api/admin/teaser', methods=['GET'])
+@login_required
 def get_teaser_entries():
     try:
         if not os.path.exists(TEASER_FILE):
@@ -112,6 +148,7 @@ def get_teaser_entries():
 # [기존] 재고 관리 API (통합됨)
 # ==========================
 @app.route('/api/admin/stock/update', methods=['POST'])
+@login_required
 def update_stock():
     try:
         data = request.get_json()
@@ -123,12 +160,13 @@ def update_stock():
         return jsonify({'status': 'fail', 'message': str(e)})
 
 @app.route('/api/admin/stock/add', methods=['POST'])
+@login_required
 def add_stock_item():
     try:
         data = request.get_json()
-        name = data.get('name')
+        name = sanitize_input(data.get('name'))
         count = data.get('count')
-        category = data.get('category') or '반납물품'
+        category = sanitize_input(data.get('category') or '반납물품')
 
         stock_df = load_stock()
         new_row = {'물품': name, '재고현황': count, '카테고리': category}
@@ -139,6 +177,7 @@ def add_stock_item():
         return jsonify({'status': 'fail', 'message': str(e)})
 
 @app.route('/api/admin/stock/delete', methods=['POST'])
+@login_required
 def delete_stock_item():
     try:
         data = request.get_json()
@@ -174,36 +213,39 @@ def get_departments():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/borrow', methods=['POST'])
+@limiter.limit("10 per minute")
 def borrow_item():
     data = request.get_json()
     selected_items = data.get('selected_items', []) 
-    stock_df = load_stock()
-    log_df = load_log()
-    
-    for item_name in selected_items:
-        idx = stock_df.index[stock_df['물품'] == item_name].tolist()
-        if not idx:
-            return jsonify({'status': 'fail', 'message': f'{item_name} 없는 물품입니다.'})
-        stock_idx = idx[0]
-        if stock_df.loc[stock_idx, '재고현황'] <= 0:
-             return jsonify({'status': 'fail', 'message': f'{item_name} 재고가 부족합니다.'})
-        stock_df.loc[stock_idx, '재고현황'] -= 1
 
-    new_log = {
-        '이름': data.get('name'),
-        '전화번호': data.get('phone'),
-        '학번': data.get('student_id'),
-        '학과': data.get('department'),
-        '대여물품': ", ".join(selected_items),
-        '대여담당자': '', 
-        '대여시각': datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S'),
-        '대여현황': '신청',
-        '반납담당자': '',
-        '반납시각': ''
-    }
-    log_df = pd.concat([log_df, pd.DataFrame([new_log])], ignore_index=True)
-    save_stock(stock_df)
-    save_log(log_df)
+    with data_lock:
+        stock_df = load_stock()
+    
+        for item_name in selected_items:
+            idx = stock_df.index[stock_df['물품'] == item_name].tolist()
+            if not idx:
+                return jsonify({'status': 'fail', 'message': f'{item_name} 없는 물품입니다.'})
+            stock_idx = idx[0]
+            if stock_df.loc[stock_idx, '재고현황'] <= 0:
+                return jsonify({'status': 'fail', 'message': f'{item_name} 재고가 부족합니다.'})
+            stock_df.loc[stock_idx, '재고현황'] -= 1
+
+        log_df = load_log()
+        new_log = {
+            '이름': sanitize_input(data.get('name')),
+            '전화번호': sanitize_input(data.get('phone')),
+            '학번': sanitize_input(data.get('student_id')),
+            '학과': sanitize_input(data.get('department')),
+            '대여물품': ", ".join(selected_items),
+            '대여담당자': '', 
+            '대여시각': datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S'),
+            '대여현황': '신청',
+            '반납담당자': '',
+            '반납시각': ''
+        }
+        log_df = pd.concat([log_df, pd.DataFrame([new_log])], ignore_index=True)
+        save_stock(stock_df)
+        save_log(log_df)
     return jsonify({'status': 'success'})
 
 @app.route('/api/check', methods=['POST'])
@@ -242,6 +284,7 @@ def admin_login():
         return jsonify({'status': 'fail', 'message': '비밀번호 불일치'}), 401
 
 @app.route('/api/admin/dashboard', methods=['GET'])
+@login_required
 def admin_dashboard():
     log_df = load_log()
     today = datetime.now(KST).strftime('%Y-%m-%d')
@@ -250,6 +293,7 @@ def admin_dashboard():
     return jsonify({'status': 'success', 'today_count': today_count, 'recent_logs': recent_logs})
 
 @app.route('/api/admin/requests', methods=['GET'])
+@login_required
 def get_requests():
     log_df = load_log()
     log_df['id'] = log_df.index 
@@ -267,6 +311,7 @@ def get_requests():
     return jsonify({'status': 'success', 'data': data})
 
 @app.route('/api/admin/approve', methods=['POST'])
+@login_required
 def approve_request():
     data = request.get_json()
     log_id = data.get('id')
@@ -299,6 +344,7 @@ def approve_request():
     return jsonify({'status': 'fail'})
 
 @app.route('/api/admin/reject', methods=['POST'])
+@login_required
 def reject_request():
     data = request.get_json()
     log_id = data.get('id')
@@ -320,6 +366,7 @@ def reject_request():
     return jsonify({'status': 'fail'})
 
 @app.route('/api/admin/ongoing', methods=['GET'])
+@login_required
 def get_ongoing():
     log_df = load_log()
     log_df['id'] = log_df.index
@@ -338,6 +385,7 @@ def get_ongoing():
     return jsonify({'status': 'success', 'data': data})
 
 @app.route('/api/admin/return', methods=['POST'])
+@login_required
 def return_item():
     data = request.get_json()
     log_id = data.get('id')
@@ -365,6 +413,7 @@ def return_item():
     return jsonify({'status': 'fail'})
 
 @app.route('/api/admin/logs', methods=['GET'])
+@login_required
 def get_all_logs():
     log_df = load_log()
     data = log_df.to_dict(orient='records')[::-1]
@@ -374,6 +423,7 @@ def get_all_logs():
 # [수정] 엑셀 다운로드 API (파일명 + 시각 설정)
 # ==========================
 @app.route('/api/admin/download_log', methods=['GET'])
+@login_required
 def download_log_file():
     if os.path.exists(LOG_FILE):
         # 1. 현재 시간(KST) 구하기
@@ -391,4 +441,4 @@ def download_log_file():
     return "파일이 없습니다.", 404
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=False)

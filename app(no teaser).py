@@ -3,15 +3,21 @@ import sys
 import pandas as pd
 from flask import Flask, jsonify, request, session
 from flask_cors import CORS
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from dotenv import load_dotenv  # [추가] 환경변수 로드 모듈
+
+# --- 환경 변수 로드 ---
+load_dotenv()  # .env 파일을 찾아서 로드합니다.
 
 # --- 기본 설정 ---
 os.environ["PYTHONIOENCODING"] = "utf-8"
 
 app = Flask(__name__)
-app.secret_key = 'saegil-portal-secret-key-!@#$' 
 
-# CORS 설정 (React 포트 3000번 허용 + 세션 쿠키 허용)
+# [수정] .env에서 가져오기 (없을 경우를 대비해 두 번째 인자에 기본값 설정 가능)
+app.secret_key = os.getenv('FLASK_SECRET_KEY', 'default-secret-key') 
+
+# CORS 설정
 CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
 
 # --- 상수 정의 ---
@@ -208,4 +214,4 @@ def admin_dashboard():
 
 if __name__ == '__main__':
     # Docker에서는 host='0.0.0.0'이 필수입니다.
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=False)
