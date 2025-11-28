@@ -1,5 +1,5 @@
 # routes/notice_routes.py
-from flask import Blueprint, request, jsonify, send_from_directory
+from flask import Blueprint, request, jsonify, send_from_directory, session
 import os
 import shutil 
 from models import db, Notice, NoticeFile
@@ -17,8 +17,18 @@ def allowed_file(filename):
 @notice_bp.route('', methods=['GET'])
 @limiter.limit("30 per minute")
 def get_notices():
-    # 고정 공지 우선, 그 다음 최신순 정렬
-    notices = Notice.query.order_by(Notice.fixed.desc(), Notice.created_at.desc()).all()
+    # [수정] 기본적으로는 '공개된(is_public=True)' 글만 가져옵니다.
+    query = Notice.query.filter_by(is_public=True)
+    
+    # [조건 추가] 1. 관리자이고 + 2. 명시적으로 '비공개 포함(include_private)'을 요청했을 때만 전체 조회
+    # AdminNoticeListPage에서만 이 파라미터를 보낼 것입니다.
+    if session.get('is_admin') and request.args.get('include_private') == 'true':
+        # 필터 없이 모든 글 조회 (query 재정의)
+        query = Notice.query
+        
+    # 정렬: 고정글 우선 -> 최신순
+    notices = query.order_by(Notice.fixed.desc(), Notice.created_at.desc()).all()
+    
     return jsonify([n.to_dict() for n in notices])
 
 # --- 2. 상세 조회 + 조회수 증가 (GET) ---
@@ -43,12 +53,15 @@ def create_notice():
     content = request.form.get('content')
     author = request.form.get('author', '여정 학생회')
     fixed = request.form.get('fixed') == 'true'
+    is_public = request.form.get('is_public') == 'true'
     
     if not title or not content:
         return jsonify({'error': '제목과 내용은 필수입니다.'}), 400
 
     try:
-        new_notice = Notice(title=title, content=content, author=author, fixed=fixed)
+        new_notice = Notice(
+            title=title, content=content, author=author, 
+            fixed=fixed, is_public=is_public )
         db.session.add(new_notice)
         db.session.flush() # ID 생성
         notice_id = str(new_notice.id)
@@ -86,6 +99,7 @@ def update_notice(id):
     notice.title = request.form.get('title')
     notice.content = request.form.get('content')
     notice.fixed = request.form.get('fixed') == 'true'
+    notice.is_public = request.form.get('is_public') == 'true'
     
     # [수정] 추가 파일 업로드
     if 'files' in request.files:

@@ -16,6 +16,7 @@ class Notice(db.Model):
     fixed = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.now)
     files = db.relationship('NoticeFile', backref='notice', cascade='all, delete-orphan')
+    is_public = db.Column(db.Boolean, default=True)
 
     def to_dict(self):
         return {
@@ -25,6 +26,7 @@ class Notice(db.Model):
             'author': self.author,
             'views': self.views,
             'fixed': self.fixed,
+            'is_public': self.is_public,
             'date': self.created_at.strftime('%Y-%m-%d'),
             'files': [f.to_dict() for f in self.files]
         }
