@@ -55,3 +55,19 @@ class Schedule(db.Model):
 
     def to_dict(self):
         return {'name': self.name, 'start': self.start_date, 'end': self.end_date}
+    
+# 4. [NEW] 인스타그램 대체 테이블
+class InstaPost(db.Model):
+    __tablename__ = 'insta_posts'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    img_filename = db.Column(db.String(300), nullable=False) # 업로드한 이미지 파일명
+    link_url = db.Column(db.String(500), nullable=False)     # 클릭 시 이동할 인스타 주소
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'img_filename': self.img_filename,
+            'link_url': self.link_url
+        }

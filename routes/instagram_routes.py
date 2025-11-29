@@ -1,62 +1,87 @@
 # routes/instagram_routes.py
-from flask import Blueprint, jsonify
-import requests
+from flask import Blueprint, request, jsonify, send_from_directory
+from werkzeug.utils import secure_filename
 import os
+from models import db, InstaPost
+from extensions import limiter, login_required
 
 insta_bp = Blueprint('instagram', __name__, url_prefix='/api/instagram')
 
+# 이미지 저장 경로 설정 (uploads/instagram 폴더 사용)
+BASE_DIR = os.path.abspath(os.getcwd())
+INSTA_UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads', 'instagram')
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+
+if not os.path.exists(INSTA_UPLOAD_FOLDER):
+    os.makedirs(INSTA_UPLOAD_FOLDER)
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+# --- 1. 목록 조회 (누구나 가능) ---
 @insta_bp.route('/posts', methods=['GET'])
-def get_instagram_posts():
-    # .env에서 토큰 가져오기
-    access_token = os.getenv('INSTAGRAM_ACCESS_TOKEN')
-    user_id = os.getenv('INSTAGRAM_USER_ID') # (선택) ID를 모르면 'me' 사용 가능
+def get_posts():
+    # 최신순으로 7개만 가져오기
+    posts = InstaPost.query.order_by(InstaPost.created_at.desc()).limit(7).all()
     
-    # 1. 토큰이 없으면 더미 데이터 반환 (개발용)
-    if not access_token:
-        return jsonify({
-            'status': 'success',
-            'data': _get_dummy_posts()
+    data = []
+    for post in posts:
+        data.append({
+            'id': post.id,
+            # 프론트에서 보여줄 이미지 URL (API 경로)
+            'imgUrl': f"/api/instagram/image/{post.img_filename}", 
+            'link': post.link_url
         })
+    
+    # 데이터가 없으면 더미 데이터 반환 (선택사항, 필요 없으면 빈 배열 [])
+    if not data:
+        return jsonify({'status': 'success', 'data': []})
 
-    try:
-        # 2. 인스타그램 Graph API 호출
-        # media_type, media_url, permalink, caption 필드 요청
-        url = f"https://graph.instagram.com/me/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink&access_token={access_token}&limit=7"
+    return jsonify({'status': 'success', 'data': data})
+
+# --- 2. 게시물 등록 (관리자 전용) ---
+@insta_bp.route('', methods=['POST'])
+@login_required
+def create_post():
+    link_url = request.form.get('link_url')
+    
+    if not link_url or 'file' not in request.files:
+        return jsonify({'error': '링크와 이미지는 필수입니다.'}), 400
         
-        res = requests.get(url)
-        data = res.json()
+    file = request.files['file']
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
         
-        if 'error' in data:
-            print("Instagram API Error:", data['error'])
-            return jsonify({'status': 'success', 'data': _get_dummy_posts()})
+        # 파일명 중복 방지를 위해 시간 등을 붙여도 좋지만, 여기선 간단히 저장
+        import time
+        filename = f"{int(time.time())}_{filename}"
+        
+        file.save(os.path.join(INSTA_UPLOAD_FOLDER, filename))
+        
+        new_post = InstaPost(img_filename=filename, link_url=link_url)
+        db.session.add(new_post)
+        db.session.commit()
+        
+        return jsonify({'message': '등록 성공'}), 201
+        
+    return jsonify({'error': '파일 형식이 올바르지 않습니다.'}), 400
 
-        posts = []
-        for item in data.get('data', []):
-            # 동영상(VIDEO)인 경우 썸네일 사용, 아니면 이미지 URL 사용
-            img_url = item.get('thumbnail_url') if item.get('media_type') == 'VIDEO' else item.get('media_url')
-            
-            posts.append({
-                'id': item['id'],
-                'imgUrl': img_url,
-                'link': item.get('permalink', 'https://instagram.com'),
-                'caption': item.get('caption', '')
-            })
-            
-        return jsonify({'status': 'success', 'data': posts})
+# --- 3. 게시물 삭제 (관리자 전용) ---
+@insta_bp.route('/<int:id>', methods=['DELETE'])
+@login_required
+def delete_post(id):
+    post = InstaPost.query.get_or_404(id)
+    
+    # 파일 삭제
+    file_path = os.path.join(INSTA_UPLOAD_FOLDER, post.img_filename)
+    if os.path.exists(file_path):
+        os.remove(file_path)
+        
+    db.session.delete(post)
+    db.session.commit()
+    return jsonify({'message': '삭제 성공'})
 
-    except Exception as e:
-        print("Server Error:", str(e))
-        # 에러 나면 더미 데이터라도 보여줌
-        return jsonify({'status': 'success', 'data': _get_dummy_posts()})
-
-def _get_dummy_posts():
-    """API 연동 전이나 에러 시 보여줄 임시 데이터"""
-    return [
-        { 'id': 1, 'color': '#3986c6', 'link': 'https://instagram.com', 'imgUrl': 'https://via.placeholder.com/600x600/3986c6/ffffff?text=Insta+1' },
-        { 'id': 2, 'color': '#e74c3c', 'link': 'https://instagram.com', 'imgUrl': 'https://via.placeholder.com/600x600/e74c3c/ffffff?text=Insta+2' },
-        { 'id': 3, 'color': '#2ecc71', 'link': 'https://instagram.com', 'imgUrl': 'https://via.placeholder.com/600x600/2ecc71/ffffff?text=Insta+3' },
-        { 'id': 4, 'color': '#f1c40f', 'link': 'https://instagram.com', 'imgUrl': 'https://via.placeholder.com/600x600/f1c40f/ffffff?text=Insta+4' },
-        { 'id': 5, 'color': '#9b59b6', 'link': 'https://instagram.com', 'imgUrl': 'https://via.placeholder.com/600x600/9b59b6/ffffff?text=Insta+5' },
-        { 'id': 6, 'color': '#34495e', 'link': 'https://instagram.com', 'imgUrl': 'https://via.placeholder.com/600x600/34495e/ffffff?text=Insta+6' },
-        { 'id': 7, 'color': '#95a5a6', 'link': 'https://instagram.com', 'imgUrl': 'https://via.placeholder.com/600x600/95a5a6/ffffff?text=Insta+7' },
-    ]
+# --- 4. 이미지 파일 제공 (GET) ---
+@insta_bp.route('/image/<filename>')
+def get_image(filename):
+    return send_from_directory(INSTA_UPLOAD_FOLDER, filename)
