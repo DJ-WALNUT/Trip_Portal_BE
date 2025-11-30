@@ -87,6 +87,14 @@ def sanitize_input(value):
         return "'" + value
     return value
 
+# [NEW] 관리자 세션 체크 API
+# 프론트엔드가 페이지 이동할 때마다 "나 아직 로그인 상태 맞아?" 하고 물어보는 용도
+@app.route('/api/admin/check-session', methods=['GET'])
+def check_session():
+    if session.get('is_admin'):
+        return jsonify({'status': 'success', 'is_admin': True})
+    return jsonify({'status': 'fail', 'message': '세션 만료'}), 401
+
 # ==========================
 # [NEW] 학사일정 API (DB 사용)
 # ==========================
