@@ -296,6 +296,13 @@ def admin_login():
         return jsonify({'status': 'success'})
     else:
         return jsonify({'status': 'fail', 'message': '비밀번호 불일치'}), 401
+    
+# [NEW] 관리자 로그아웃 API
+@app.route('/api/admin/logout', methods=['POST'])
+def admin_logout():
+    # 세션에서 관리자 권한 제거
+    session.pop('is_admin', None)
+    return jsonify({'status': 'success', 'message': '로그아웃 되었습니다.'})
 
 @app.route('/api/admin/dashboard', methods=['GET'])
 @login_required
