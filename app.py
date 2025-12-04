@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import json
 import csv
 from flask import Flask, jsonify, request, session, send_file
 from flask_cors import CORS
@@ -32,6 +33,7 @@ ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD')
 
 # DB 설정 (SQLite)
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+SETTINGS_FILE = os.path.join(BASE_DIR, 'settings.json')
 db_path = os.path.join(BASE_DIR, 'data', 'database.db')
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -88,6 +90,20 @@ def sanitize_input(value):
     if isinstance(value, str) and value.startswith(('=', '+', '-', '@')):
         return "'" + value
     return value
+
+# --- 설정 관리 헬퍼 함수 ---
+def load_settings():
+    if not os.path.exists(SETTINGS_FILE):
+        return {'snowfall': False} # 기본값은 꺼짐
+    try:
+        with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except:
+        return {'snowfall': False}
+
+def save_settings(settings):
+    with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(settings, f, ensure_ascii=False, indent=4)
 
 # [NEW] 관리자 세션 체크 API
 # 프론트엔드가 페이지 이동할 때마다 "나 아직 로그인 상태 맞아?" 하고 물어보는 용도
@@ -159,6 +175,23 @@ def get_teaser_entries():
         return jsonify({'status': 'success', 'data': df.to_dict(orient='records')})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/system/snowfall', methods=['GET'])
+def get_snowfall_status():
+    settings = load_settings()
+    return jsonify({'status': 'success', 'enabled': settings.get('snowfall', False)})
+
+@app.route('/api/admin/system/snowfall', methods=['POST'])
+@login_required
+def set_snowfall_status():
+    data = request.get_json()
+    enabled = data.get('enabled', False)
+    
+    settings = load_settings()
+    settings['snowfall'] = enabled
+    save_settings(settings)
+    
+    return jsonify({'status': 'success', 'enabled': enabled})
 
 # ==========================
 # [기존] 재고 관리 API (통합됨)
