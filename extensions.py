@@ -19,3 +19,11 @@ def login_required(f):
             return jsonify({'status': 'fail', 'message': '로그인이 필요합니다.'}), 401
         return f(*args, **kwargs)
     return decorated_function
+
+def master_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('is_admin') or session.get('role') != 'master':
+            return jsonify({'status': 'fail', 'message': '마스터 권한이 필요합니다.'}), 403
+        return f(*args, **kwargs)
+    return decorated_function

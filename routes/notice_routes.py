@@ -3,7 +3,7 @@ from flask import Blueprint, request, jsonify, send_from_directory, session
 import os
 import shutil 
 from models import db, Notice, NoticeFile
-from extensions import limiter, login_required
+from extensions import limiter, login_required, master_required
 
 notice_bp = Blueprint('notice', __name__, url_prefix='/api/notices')
 
@@ -142,6 +142,7 @@ def delete_file(file_id):
 
 # --- 6. 공지 삭제 (DELETE) ---
 @notice_bp.route('/<int:id>', methods=['DELETE'])
+@master_required
 @login_required
 def delete_notice(id):
     notice = Notice.query.get_or_404(id)
@@ -156,6 +157,7 @@ def delete_notice(id):
 
 # --- 7. 파일 다운로드 (GET) ---
 @notice_bp.route('/download/<int:notice_id>/<filename>')
+@limiter.exempt
 def download_file(notice_id, filename):
     target_dir = os.path.join(UPLOAD_FOLDER, str(notice_id))
     return send_from_directory(target_dir, filename, as_attachment=True)

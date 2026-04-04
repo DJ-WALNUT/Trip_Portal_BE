@@ -11,9 +11,9 @@ from functools import wraps
 
 # [NEW] 모델 및 라우트 임포트
 from models import db, Schedule
-from extensions import limiter, login_required 
-from routes.notice_routes import notice_bp  # (앞서 작성한 공지사항 코드)
-from routes.instagram_routes import insta_bp # (방금 작성한 인스타 코드)
+from extensions import limiter, login_required , master_required
+from routes.notice_routes import notice_bp  # (공지사항 코드)
+from routes.instagram_routes import insta_bp # (인스타 코드)
 from routes.campus_routes import campus_bp
 
 # --- 환경 변수 로드 ---
@@ -29,7 +29,8 @@ limiter.init_app(app) # [추가] Limiter를 app과 연결 (초기화)
 # [수정] .env에서 가져오기 (없을 경우를 대비해 두 번째 인자에 기본값 설정 가능)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'default-secret-key')
 # [수정] 비밀번호를 환경 변수에서 가져옴
-ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD') 
+ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD')
+SUB_PASSWORD = os.getenv('SUB_PASSWORD')
 
 # DB 설정 (SQLite)
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -110,7 +111,11 @@ def save_settings(settings):
 @app.route('/api/admin/check-session', methods=['GET'])
 def check_session():
     if session.get('is_admin'):
-        return jsonify({'status': 'success', 'is_admin': True})
+        return jsonify({
+            'status': 'success', 
+            'is_admin': True, 
+            'role': session.get('role') # 현재 권한 반환
+        })
     return jsonify({'status': 'fail', 'message': '세션 만료'}), 401
 
 # ==========================
@@ -156,6 +161,7 @@ def teaser_entry():
         
 # 2. [신규] 티저 응모 목록 조회 (관리자용)
 @app.route('/api/admin/teaser', methods=['GET'])
+@master_required
 @login_required
 def get_teaser_entries():
     try:
@@ -226,6 +232,7 @@ def add_stock_item():
         return jsonify({'status': 'fail', 'message': str(e)})
 
 @app.route('/api/admin/stock/delete', methods=['POST'])
+@master_required
 @login_required
 def delete_stock_item():
     try:
@@ -326,18 +333,29 @@ def check_status():
 @app.route('/api/admin/login', methods=['POST'])
 def admin_login():
     data = request.get_json()
-    if data.get('password') == ADMIN_PASSWORD:
+    input_pw = data.get('password')
+
+    # 마스터 관리자 체크
+    if input_pw == ADMIN_PASSWORD:
         session['is_admin'] = True
-        return jsonify({'status': 'success'})
+        session['role'] = 'master' # 세션에 역할 저장
+        return jsonify({'status': 'success', 'role': 'master'})
+    
+    # 서브 관리자 체크
+    elif input_pw == SUB_PASSWORD:
+        session['is_admin'] = True
+        session['role'] = 'sub' # 세션에 역할 저장
+        return jsonify({'status': 'success', 'role': 'sub'})
+    
     else:
         return jsonify({'status': 'fail', 'message': '비밀번호 불일치'}), 401
     
 # [NEW] 관리자 로그아웃 API
 @app.route('/api/admin/logout', methods=['POST'])
 def admin_logout():
-    # 세션에서 관리자 권한 제거
     session.pop('is_admin', None)
-    return jsonify({'status': 'success', 'message': '로그아웃 되었습니다.'})
+    session.pop('role', None) # 추가
+    return jsonify({'status': 'success'})
 
 @app.route('/api/admin/dashboard', methods=['GET'])
 @login_required
