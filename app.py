@@ -318,7 +318,7 @@ def check_status():
     for _, row in matches.iterrows():
         try:
             borrow_dt = datetime.strptime(str(row['대여시각']), '%Y-%m-%d %H:%M:%S')
-            due_date = (borrow_dt + timedelta(days=7)).strftime('%Y-%m-%d')
+            due_date = (borrow_dt + timedelta(days=4)).strftime('%Y-%m-%d')
         except:
             due_date = '-'
         result_list.append({
