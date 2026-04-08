@@ -1,8 +1,10 @@
 # models.py
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 db = SQLAlchemy()
+# 한국 시간(KST) 정의 추가
+KST = timezone(timedelta(hours=9))
 
 # 1. 공지사항 테이블
 class Notice(db.Model):
@@ -14,7 +16,7 @@ class Notice(db.Model):
     author = db.Column(db.String(50), default='여정 학생회')
     views = db.Column(db.Integer, default=0)
     fixed = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=datetime.now)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(KST))
     files = db.relationship('NoticeFile', backref='notice', cascade='all, delete-orphan')
     is_public = db.Column(db.Boolean, default=True)
 
@@ -27,7 +29,7 @@ class Notice(db.Model):
             'views': self.views,
             'fixed': self.fixed,
             'is_public': self.is_public,
-            'date': self.created_at.strftime('%Y-%m-%d'),
+            'date': self.created_at.isoformat(),
             'files': [f.to_dict() for f in self.files]
         }
 
@@ -63,7 +65,7 @@ class InstaPost(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     img_filename = db.Column(db.String(300), nullable=False) # 업로드한 이미지 파일명
     link_url = db.Column(db.String(500), nullable=False)     # 클릭 시 이동할 인스타 주소
-    created_at = db.Column(db.DateTime, default=datetime.now)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(KST))
 
     def to_dict(self):
         return {
