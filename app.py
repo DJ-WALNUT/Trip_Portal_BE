@@ -15,6 +15,7 @@ from extensions import limiter, login_required , master_required
 from routes.notice_routes import notice_bp  # (공지사항 코드)
 from routes.instagram_routes import insta_bp # (인스타 코드)
 from routes.campus_routes import campus_bp
+from routes.gallery_routes import gallery_bp
 
 # --- 환경 변수 로드 ---
 load_dotenv()  # .env 파일을 찾아서 로드합니다.
@@ -44,6 +45,7 @@ db.init_app(app)
 app.register_blueprint(notice_bp)
 app.register_blueprint(insta_bp)
 app.register_blueprint(campus_bp)
+app.register_blueprint(gallery_bp)
 
 # CORS 설정
 allowed_origins = [
