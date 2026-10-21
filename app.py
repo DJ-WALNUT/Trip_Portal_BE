@@ -16,6 +16,8 @@ from routes.notice_routes import notice_bp  # (공지사항 코드)
 from routes.instagram_routes import insta_bp # (인스타 코드)
 from routes.campus_routes import campus_bp
 from routes.gallery_routes import gallery_bp
+from routes.site_info_routes import site_info_bp
+from site_settings import ensure_defaults
 
 # --- 환경 변수 로드 ---
 load_dotenv()  # .env 파일을 찾아서 로드합니다.
@@ -46,6 +48,7 @@ app.register_blueprint(notice_bp)
 app.register_blueprint(insta_bp)
 app.register_blueprint(campus_bp)
 app.register_blueprint(gallery_bp)
+app.register_blueprint(site_info_bp)
 
 # CORS 설정
 allowed_origins = [
@@ -521,6 +524,7 @@ def download_log_file():
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()  # notices, schedules 테이블 생성
+        ensure_defaults(SETTINGS_FILE)
         
         # 학사일정 초기 데이터가 없으면 넣기 (편의용)
         if not Schedule.query.first():

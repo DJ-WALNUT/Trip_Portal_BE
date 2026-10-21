@@ -56,7 +56,7 @@ class Schedule(db.Model):
     end_date = db.Column(db.String(20))
 
     def to_dict(self):
-        return {'name': self.name, 'start': self.start_date, 'end': self.end_date}
+        return {'id': self.id, 'name': self.name, 'start': self.start_date, 'end': self.end_date}
     
 # 4. [NEW] 인스타그램 대체 테이블
 class InstaPost(db.Model):
