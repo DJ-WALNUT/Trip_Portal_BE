@@ -1,5 +1,6 @@
 import os
 import sys
+import shutil
 import tempfile
 
 import pytest
@@ -16,6 +17,11 @@ os.environ['FLASK_SECRET_KEY'] = 'test'
 os.environ['RATELIMIT_ENABLED'] = 'False'
 
 _ORIG_CWD = os.getcwd()
+
+
+def pytest_sessionfinish(session, exitstatus):
+    os.chdir(_ORIG_CWD)
+    shutil.rmtree(_TMP, ignore_errors=True)
 
 
 @pytest.fixture
@@ -37,13 +43,6 @@ def app_ctx(tmp_path):
 @pytest.fixture
 def client(app_ctx):
     return app_ctx.test_client()
-
-
-def login(client, role='master'):
-    password = 'testmaster' if role == 'master' else 'testsub'
-    res = client.post('/api/admin/login', json={'password': password})
-    assert res.status_code == 200
-    return res
 
 
 @pytest.fixture

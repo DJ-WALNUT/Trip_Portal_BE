@@ -1,6 +1,6 @@
 import pandas as pd
 
-from conftest import login
+from tests.helpers import login
 
 LOG = 'data/borrow_log.xlsx'
 BORROW = {'name': '홍길동', 'student_id': '20260001', 'department': '컴퓨터정보공학부',

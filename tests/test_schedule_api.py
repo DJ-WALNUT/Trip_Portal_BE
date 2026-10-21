@@ -1,4 +1,4 @@
-from tests.conftest import login
+from tests.helpers import login
 
 GOOD = {'name': '2027-2', 'start': '2027-09-01', 'end': '2027-12-20'}
 

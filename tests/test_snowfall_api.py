@@ -1,4 +1,4 @@
-from conftest import login
+from tests.helpers import login
 
 
 def test_snowfall_contract(client):

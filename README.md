@@ -137,8 +137,9 @@ docker-compose up -d --build
 
 #### 배포 시 유의사항
 - 백엔드를 먼저 배포합니다. (새 API가 없어도 프론트는 기본값으로 동작)
-- 볼륨 설정이 바뀌므로 운영 서버에서 `docker compose up -d`로 컨테이너를 다시 만듭니다. `uploads/`는 볼륨으로 보존됩니다.
-- 배포 후 첫 실행 때 `settings.json`의 눈송이 값이 DB로 한 번 이전되며, 이후 `settings.json`은 쓰이지 않습니다.
+- 배포 전(선택): 기존 컨테이너의 눈송이 설정 파일을 꺼내 둡니다. `docker cp trip-backend:/app/settings.json ./settings.json`
+- 배포: `docker-compose up -d --build` 로 컨테이너를 다시 만듭니다. 볼륨 설정이 바뀌며 `uploads/`는 볼륨으로 보존됩니다.
+- `settings.json`은 컨테이너 내부 파일이라 재생성 시 사라질 수 있어 눈송이 값이 자동 이전되지 않을 수 있습니다. 배포 후 관리자 대시보드의 눈송이 토글을 확인하고 필요하면 다시 설정하세요.
 
 Copyright © 2025 Catholic University of Korea,</br>
 CUK Engineering Student 4th Council [Trip] (최원서).

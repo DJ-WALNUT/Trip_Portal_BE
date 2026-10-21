@@ -1,4 +1,4 @@
-from tests.conftest import login
+from tests.helpers import login
 
 
 def test_get_site_info_public(client):

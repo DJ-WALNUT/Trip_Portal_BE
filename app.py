@@ -307,11 +307,12 @@ def check_status():
     if matches.empty:
         return jsonify({'status': 'fail', 'message': '기록이 없습니다.'})
 
+    return_days = get_setting('rental.return_days')
     result_list = []
     for _, row in matches.iterrows():
         try:
             borrow_dt = datetime.strptime(str(row['대여시각']), '%Y-%m-%d %H:%M:%S')
-            due_date = (borrow_dt + timedelta(days=get_setting('rental.return_days'))).strftime('%Y-%m-%d')
+            due_date = (borrow_dt + timedelta(days=return_days)).strftime('%Y-%m-%d')
         except:
             due_date = '-'
         result_list.append({
