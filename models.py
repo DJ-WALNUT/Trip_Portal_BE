@@ -29,7 +29,7 @@ class Notice(db.Model):
             'views': self.views,
             'fixed': self.fixed,
             'is_public': self.is_public,
-            'date': self.created_at.isoformat(),
+            'date': self.created_at.strftime('%Y-%m-%d'),
             'files': [f.to_dict() for f in self.files]
         }
 

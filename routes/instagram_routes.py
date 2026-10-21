@@ -20,6 +20,7 @@ def allowed_file(filename):
 
 # --- 1. 목록 조회 (누구나 가능) ---
 @insta_bp.route('/posts', methods=['GET'])
+@limiter.exempt
 def get_posts():
     # 최신순으로 7개만 가져오기
     posts = InstaPost.query.order_by(InstaPost.created_at.desc()).limit(7).all()
@@ -83,5 +84,6 @@ def delete_post(id):
 
 # --- 4. 이미지 파일 제공 (GET) ---
 @insta_bp.route('/image/<filename>')
+@limiter.exempt
 def get_image(filename):
     return send_from_directory(INSTA_UPLOAD_FOLDER, filename)

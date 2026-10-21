@@ -1,6 +1,7 @@
 # routes/gallery_routes.py
 import os
 from flask import Blueprint, jsonify, send_from_directory
+from extensions import limiter
 
 gallery_bp = Blueprint('gallery', __name__, url_prefix='/api/gallery')
 
@@ -18,6 +19,7 @@ def is_image_file(filename):
 
 # --- 1. 사진 목록 전체 조회 ---
 @gallery_bp.route('', methods=['GET'])
+@limiter.exempt
 def get_gallery_list():
     try:
         # 폴더 내 파일 목록 읽기
@@ -40,5 +42,6 @@ def get_gallery_list():
 
 # --- 2. 이미지 파일 제공 API ---
 @gallery_bp.route('/image/<filename>')
+@limiter.exempt
 def get_gallery_image(filename):
     return send_from_directory(GALLERY_UPLOAD_FOLDER, filename)

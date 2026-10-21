@@ -7,12 +7,18 @@ services:
       - "5050:5000"
     volumes:
       # [중요] 로컬의 data 폴더와 컨테이너 내부 data 폴더를 연결(Sync)
-      # 컨테이너가 꺼져도 엑셀 파일 데이터가 날아가지 않게 함
+      # 컨테이너가 꺼져도 엑셀 파일 데이터가 날아가지 않게
       - ./data:/app/data
       - ./app.py:/app/app.py
+      - ./extensions.py:/app/extensions.py
+      - ./models.py:/app/models.py
       - ./routes/notice_routes.py:/app/routes/notice_routes.py
+      - ./routes/instagram_routes.py:/app/routes/instagram_routes.py
+      - ./routes/campus_routes.py:/app/routes/campus_routes.py
+      - ./routes/gallery_routes.py:/app/routes/gallery_routes.py
+      - ./uploads:/app/uploads
     restart: always
-    # [추가됨] 로컬에 있는 .env 파일을 컨테이너가 읽을 수 있게 등록
+    # [추가됨] 로컬에 있는 .env 파일을 컨테이너가 읽을 수 있게 등록 함
     env_file:
       - .env
     environment:

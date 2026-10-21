@@ -52,7 +52,8 @@ allowed_origins = [
     "http://localhost:3000",             # 로컬 개발용
     "http://localhost:5173",             # 로컬 개발용
     "http://localhost:5174",             # 로컬 개발용
-    "https://cukeng.kr"                  # 여정 도메인
+    "https://cukeng.kr",                 # 여정 도메인
+    "https://temp.cukeng.kr"
 ]
 CORS(app, resources={r"/api/*": {"origins": allowed_origins}}, supports_credentials=True)
 

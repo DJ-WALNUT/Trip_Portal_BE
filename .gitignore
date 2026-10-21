@@ -15,3 +15,9 @@ __pycache__/
 
 # 4. 시스템 파일
 .DS_Store
+
+# 5. 업로드 파일 (서버 볼륨으로 보존, git에는 올리지 않음)
+uploads/
+
+# 6. 런타임 설정 파일
+settings.json
