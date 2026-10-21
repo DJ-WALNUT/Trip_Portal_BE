@@ -44,3 +44,14 @@ def login(client, role='master'):
     res = client.post('/api/admin/login', json={'password': password})
     assert res.status_code == 200
     return res
+
+
+@pytest.fixture
+def data_files(app_ctx):
+    """임시 data/에 재고(우산 5개)와 빈 대여 기록 엑셀을 만든다."""
+    import pandas as pd
+    pd.DataFrame([{'물품': '우산', '재고현황': 5, '카테고리': '생활'}]).to_excel(
+        os.path.join('data', 'stuff_ongoing.xlsx'), index=False)
+    cols = ['이름', '전화번호', '학번', '학과', '대여물품', '대여담당자',
+            '대여시각', '대여현황', '반납담당자', '반납시각']
+    pd.DataFrame(columns=cols).to_excel(os.path.join('data', 'borrow_log.xlsx'), index=False)

@@ -17,7 +17,7 @@ from routes.instagram_routes import insta_bp # (인스타 코드)
 from routes.campus_routes import campus_bp
 from routes.gallery_routes import gallery_bp
 from routes.site_info_routes import site_info_bp
-from site_settings import ensure_defaults
+from site_settings import ensure_defaults, get_setting, update_settings
 
 # --- 환경 변수 로드 ---
 load_dotenv()  # .env 파일을 찾아서 로드합니다.
@@ -98,20 +98,6 @@ def sanitize_input(value):
         return "'" + value
     return value
 
-# --- 설정 관리 헬퍼 함수 ---
-def load_settings():
-    if not os.path.exists(SETTINGS_FILE):
-        return {'snowfall': False} # 기본값은 꺼짐
-    try:
-        with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except:
-        return {'snowfall': False}
-
-def save_settings(settings):
-    with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(settings, f, ensure_ascii=False, indent=4)
-
 # [NEW] 관리자 세션 체크 API
 # 프론트엔드가 페이지 이동할 때마다 "나 아직 로그인 상태 맞아?" 하고 물어보는 용도
 @app.route('/api/admin/check-session', methods=['GET'])
@@ -190,8 +176,7 @@ def get_teaser_entries():
 
 @app.route('/api/system/snowfall', methods=['GET'])
 def get_snowfall_status():
-    settings = load_settings()
-    return jsonify({'status': 'success', 'enabled': settings.get('snowfall', False)})
+    return jsonify({'status': 'success', 'enabled': get_setting('system.snowfall')})
 
 @app.route('/api/admin/system/snowfall', methods=['POST'])
 @login_required
@@ -199,11 +184,11 @@ def set_snowfall_status():
     data = request.get_json()
     enabled = data.get('enabled', False)
     
-    settings = load_settings()
-    settings['snowfall'] = enabled
-    save_settings(settings)
-    
-    return jsonify({'status': 'success', 'enabled': enabled})
+    ok, result = update_settings({'system.snowfall': bool(enabled)}, session.get('role'))
+    if not ok:
+        return jsonify({'status': 'fail', 'errors': result}), 400
+
+    return jsonify({'status': 'success', 'enabled': result['system.snowfall']})
 
 # ==========================
 # [기존] 재고 관리 API (통합됨)
@@ -277,6 +262,8 @@ def get_departments():
 @app.route('/api/borrow', methods=['POST'])
 @limiter.limit("10 per minute")
 def borrow_item():
+    if not get_setting('rental.enabled'):
+        return jsonify({'status': 'fail', 'message': '현재 대여 신청을 받지 않습니다.'}), 403
     data = request.get_json()
     selected_items = data.get('selected_items', []) 
 
@@ -324,7 +311,7 @@ def check_status():
     for _, row in matches.iterrows():
         try:
             borrow_dt = datetime.strptime(str(row['대여시각']), '%Y-%m-%d %H:%M:%S')
-            due_date = (borrow_dt + timedelta(days=4)).strftime('%Y-%m-%d')
+            due_date = (borrow_dt + timedelta(days=get_setting('rental.return_days'))).strftime('%Y-%m-%d')
         except:
             due_date = '-'
         result_list.append({
