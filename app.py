@@ -16,6 +16,8 @@ from routes.notice_routes import notice_bp  # (공지사항 코드)
 from routes.instagram_routes import insta_bp # (인스타 코드)
 from routes.campus_routes import campus_bp
 from routes.gallery_routes import gallery_bp
+from routes.site_info_routes import site_info_bp
+from site_settings import ensure_defaults, get_setting, update_settings
 
 # --- 환경 변수 로드 ---
 load_dotenv()  # .env 파일을 찾아서 로드합니다.
@@ -37,7 +39,7 @@ SUB_PASSWORD = os.getenv('SUB_PASSWORD')
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 SETTINGS_FILE = os.path.join(BASE_DIR, 'settings.json')
 db_path = os.path.join(BASE_DIR, 'data', 'database.db')
-app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('TRIP_DATABASE_URI') or f'sqlite:///{db_path}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # [NEW] DB 초기화 및 Blueprint 등록
@@ -46,6 +48,7 @@ app.register_blueprint(notice_bp)
 app.register_blueprint(insta_bp)
 app.register_blueprint(campus_bp)
 app.register_blueprint(gallery_bp)
+app.register_blueprint(site_info_bp)
 
 # CORS 설정
 allowed_origins = [
@@ -94,20 +97,6 @@ def sanitize_input(value):
     if isinstance(value, str) and value.startswith(('=', '+', '-', '@')):
         return "'" + value
     return value
-
-# --- 설정 관리 헬퍼 함수 ---
-def load_settings():
-    if not os.path.exists(SETTINGS_FILE):
-        return {'snowfall': False} # 기본값은 꺼짐
-    try:
-        with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except:
-        return {'snowfall': False}
-
-def save_settings(settings):
-    with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(settings, f, ensure_ascii=False, indent=4)
 
 # [NEW] 관리자 세션 체크 API
 # 프론트엔드가 페이지 이동할 때마다 "나 아직 로그인 상태 맞아?" 하고 물어보는 용도
@@ -187,8 +176,7 @@ def get_teaser_entries():
 
 @app.route('/api/system/snowfall', methods=['GET'])
 def get_snowfall_status():
-    settings = load_settings()
-    return jsonify({'status': 'success', 'enabled': settings.get('snowfall', False)})
+    return jsonify({'status': 'success', 'enabled': get_setting('system.snowfall')})
 
 @app.route('/api/admin/system/snowfall', methods=['POST'])
 @login_required
@@ -196,11 +184,11 @@ def set_snowfall_status():
     data = request.get_json()
     enabled = data.get('enabled', False)
     
-    settings = load_settings()
-    settings['snowfall'] = enabled
-    save_settings(settings)
-    
-    return jsonify({'status': 'success', 'enabled': enabled})
+    ok, result = update_settings({'system.snowfall': bool(enabled)}, session.get('role'))
+    if not ok:
+        return jsonify({'status': 'fail', 'errors': result}), 400
+
+    return jsonify({'status': 'success', 'enabled': result['system.snowfall']})
 
 # ==========================
 # [기존] 재고 관리 API (통합됨)
@@ -274,6 +262,8 @@ def get_departments():
 @app.route('/api/borrow', methods=['POST'])
 @limiter.limit("10 per minute")
 def borrow_item():
+    if not get_setting('rental.enabled'):
+        return jsonify({'status': 'fail', 'message': '현재 대여 신청을 받지 않습니다.'}), 403
     data = request.get_json()
     selected_items = data.get('selected_items', []) 
 
@@ -317,11 +307,12 @@ def check_status():
     if matches.empty:
         return jsonify({'status': 'fail', 'message': '기록이 없습니다.'})
 
+    return_days = get_setting('rental.return_days')
     result_list = []
     for _, row in matches.iterrows():
         try:
             borrow_dt = datetime.strptime(str(row['대여시각']), '%Y-%m-%d %H:%M:%S')
-            due_date = (borrow_dt + timedelta(days=4)).strftime('%Y-%m-%d')
+            due_date = (borrow_dt + timedelta(days=return_days)).strftime('%Y-%m-%d')
         except:
             due_date = '-'
         result_list.append({
@@ -521,6 +512,7 @@ def download_log_file():
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()  # notices, schedules 테이블 생성
+        ensure_defaults(SETTINGS_FILE)
         
         # 학사일정 초기 데이터가 없으면 넣기 (편의용)
         if not Schedule.query.first():

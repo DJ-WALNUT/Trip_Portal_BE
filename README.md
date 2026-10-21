@@ -123,5 +123,23 @@ docker-compose up -d --build
 ||`POST`|`/api/admin/return`|반납 처리 (관리자)|
 ||`GET`|`/api/admin/download_log`|전체 로그 엑셀 다운로드 (Timestamp 적용)|
 
+### ⚙️ 사이트 정보 관리 API
+|구분|Method|Endpoint|비고|
+|:---|:---|:---|:---|
+|설정|`GET`|`/api/site-info`|공개. 연락처·SNS·링크·문구·대여 설정 전체 조회|
+||`PUT`|`/api/admin/site-info`|마스터 전용. 일부 키만 전송 가능, 오류가 있으면 저장 없이 `400 {status:'fail', errors}`|
+|학사일정|`GET`|`/api/schedule`|항목마다 `id` 포함|
+||`POST`|`/api/admin/schedule`|마스터 전용. `{name, start, end}` → `201`|
+||`PUT`|`/api/admin/schedule/<id>`|마스터 전용. `200` / `400` / `404`|
+||`DELETE`|`/api/admin/schedule/<id>`|마스터 전용. `200` / `404`|
+
+`rental.enabled`가 꺼져 있으면 `POST /api/borrow`는 `403`을 반환합니다. 테스트는 `pip install -r requirements-dev.txt` 후 `python -m pytest -q`로 실행합니다.
+
+#### 배포 시 유의사항
+- 백엔드를 먼저 배포합니다. (새 API가 없어도 프론트는 기본값으로 동작)
+- 배포 전(선택): 기존 컨테이너의 눈송이 설정 파일을 꺼내 둡니다. `docker cp trip-backend:/app/settings.json ./settings.json`
+- 배포: `docker-compose up -d --build` 로 컨테이너를 다시 만듭니다. 볼륨 설정이 바뀌며 `uploads/`는 볼륨으로 보존됩니다.
+- `settings.json`은 컨테이너 내부 파일이라 재생성 시 사라질 수 있어 눈송이 값이 자동 이전되지 않을 수 있습니다. 배포 후 관리자 대시보드의 눈송이 토글을 확인하고 필요하면 다시 설정하세요.
+
 Copyright © 2025 Catholic University of Korea,</br>
 CUK Engineering Student 4th Council [Trip] (최원서).

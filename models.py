@@ -56,7 +56,7 @@ class Schedule(db.Model):
     end_date = db.Column(db.String(20))
 
     def to_dict(self):
-        return {'name': self.name, 'start': self.start_date, 'end': self.end_date}
+        return {'id': self.id, 'name': self.name, 'start': self.start_date, 'end': self.end_date}
     
 # 4. [NEW] 인스타그램 대체 테이블
 class InstaPost(db.Model):
@@ -73,3 +73,12 @@ class InstaPost(db.Model):
             'img_filename': self.img_filename,
             'link_url': self.link_url
         }
+
+# 5. 사이트 설정 테이블 (키-값, 값은 JSON 직렬화)
+class SiteSetting(db.Model):
+    __tablename__ = 'site_settings'
+
+    key = db.Column(db.String(64), primary_key=True)
+    value = db.Column(db.Text, nullable=False)
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(KST))
+    updated_by = db.Column(db.String(20))
