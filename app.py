@@ -37,7 +37,7 @@ SUB_PASSWORD = os.getenv('SUB_PASSWORD')
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 SETTINGS_FILE = os.path.join(BASE_DIR, 'settings.json')
 db_path = os.path.join(BASE_DIR, 'data', 'database.db')
-app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('TRIP_DATABASE_URI') or f'sqlite:///{db_path}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # [NEW] DB 초기화 및 Blueprint 등록
