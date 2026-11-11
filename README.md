@@ -25,6 +25,7 @@
   - 서식 있는 텍스트 및 **다중 파일 업로드** 지원 (폴더 기반 격리 저장).
   - **공개/비공개(임시저장)** 설정 및 상단 고정(Pin) 기능.
   - 조회수 중복 방지 로직 적용.
+- **설문조사 게시판**: 외부 설문 링크와 안내 글 관리. 마감일(KST) 기준 자동 마감, 공개/비공개 설정.
 - **인스타그램 연동**: Instagram Graph API를 활용하여 최신 게시물 피드 자동 동기화.
 - **학사일정 (D-Day)**: 주요 학사 일정을 DB화하여 메인 페이지 D-Day 자동 계산 제공.
 
@@ -58,6 +59,7 @@ backend/
 ├── uploads/               # 공지사항 첨부파일 (업로드 시 ID별 폴더 생성)
 ├── routes/                # API 라우트 (Blueprint)
 │   ├── notice_routes.py   # 공지사항 API
+│   ├── survey_routes.py   # 설문조사 API
 │   ├── instagram_routes.py# 인스타그램 API
 │   └── ...
 ├── models.py              # DB 모델 정의 (SQLAlchemy)
@@ -109,6 +111,11 @@ docker-compose up -d --build
 ||`PUT`|`/api/notices/<id>`|공지사항 수정|
 ||`DELETE`|`/api/notices/<id>`|공지사항 삭제|
 ||`GET`|`/api/notices/download/...`|첨부파일 다운로드|
+|설문조사|`GET`|`/api/surveys`|설문 목록 조회 (옵션: `include_private`). 진행중 → 마감 순|
+||`GET`|`/api/surveys/<id>`|상세 조회 (옵션: `increment`). 비공개 글은 관리자만|
+||`POST`|`/api/surveys`|설문 등록 (JSON, 관리자)|
+||`PUT`|`/api/surveys/<id>`|설문 수정 (JSON, 관리자)|
+||`DELETE`|`/api/surveys/<id>`|설문 삭제 (마스터)|
 |SNS|`GET`|`/api/instagram/posts`|인스타그램 최신 피드 조회|
 |일정|`GET`|`/api/schedule`|학사일정 데이터 조회|
 |공통|`GET`|`/api/items`|전체 물품 및 재고 조회|

@@ -17,6 +17,7 @@ from routes.instagram_routes import insta_bp # (인스타 코드)
 from routes.campus_routes import campus_bp
 from routes.gallery_routes import gallery_bp
 from routes.site_info_routes import site_info_bp
+from routes.survey_routes import survey_bp
 from site_settings import ensure_defaults, get_setting, update_settings
 
 # --- 환경 변수 로드 ---
@@ -49,6 +50,7 @@ app.register_blueprint(insta_bp)
 app.register_blueprint(campus_bp)
 app.register_blueprint(gallery_bp)
 app.register_blueprint(site_info_bp)
+app.register_blueprint(survey_bp)
 
 # CORS 설정
 allowed_origins = [
