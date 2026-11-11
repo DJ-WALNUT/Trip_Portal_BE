@@ -1,10 +1,10 @@
 # routes/survey_routes.py
-from datetime import datetime
+from datetime import date, datetime
 
 from flask import Blueprint, request, jsonify, session, abort
 
 from models import db, Survey
-from extensions import limiter, login_required
+from extensions import limiter, login_required, master_required
 
 survey_bp = Blueprint('survey', __name__, url_prefix='/api/surveys')
 
@@ -71,6 +71,27 @@ def parse_survey_payload(data, partial=False):
     return fields, None
 
 
+def _sort_key(survey):
+    """진행중(마감 임박순, 상시는 뒤) -> 마감(최근 마감순). 같은 조건이면 최신 글 먼저."""
+    newest = (-survey.created_at.timestamp(), -survey.id)
+    if survey.is_closed:
+        return (1, -survey.deadline.toordinal(), *newest)
+    return (0, (survey.deadline or date.max).toordinal(), *newest)
+
+
+# --- 목록 조회 (GET) ---
+@survey_bp.route('', methods=['GET'])
+@limiter.limit("30 per minute")
+def get_surveys():
+    query = Survey.query.filter_by(is_public=True)
+    # 관리자가 명시적으로 요청했을 때만 비공개 포함
+    if session.get('is_admin') and request.args.get('include_private') == 'true':
+        query = Survey.query
+
+    surveys = sorted(query.all(), key=_sort_key)
+    return jsonify([s.to_dict() for s in surveys])
+
+
 # --- 상세 조회 + 조회수 증가 (GET) ---
 @survey_bp.route('/<int:id>', methods=['GET'])
 @limiter.limit("30 per minute")
@@ -99,3 +120,36 @@ def create_survey():
     db.session.add(survey)
     db.session.commit()
     return jsonify({'message': '등록 성공', 'data': survey.to_dict()}), 201
+
+
+# --- 수정 (PUT) ---
+@survey_bp.route('/<int:id>', methods=['PUT'])
+@login_required
+def update_survey(id):
+    survey = db.session.get(Survey, id)
+    if survey is None:
+        abort(404)
+
+    # 요청에 없는 값은 그대로 둔다 (공개 여부가 실수로 바뀌지 않게)
+    fields, error = parse_survey_payload(request.get_json(silent=True), partial=True)
+    if error:
+        return jsonify({'error': error}), 400
+
+    for key, value in fields.items():
+        setattr(survey, key, value)
+    db.session.commit()
+    return jsonify({'message': '수정 성공', 'data': survey.to_dict()})
+
+
+# --- 삭제 (DELETE) ---
+# login_required가 바깥: 비로그인은 401, 로그인한 sub는 403
+@survey_bp.route('/<int:id>', methods=['DELETE'])
+@login_required
+@master_required
+def delete_survey(id):
+    survey = db.session.get(Survey, id)
+    if survey is None:
+        abort(404)
+    db.session.delete(survey)
+    db.session.commit()
+    return jsonify({'message': '삭제 성공'})

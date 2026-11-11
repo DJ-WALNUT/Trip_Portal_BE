@@ -121,3 +121,67 @@ def test_private_detail_404_for_guests(client):
     logout(client)
     assert client.get(f'/api/surveys/{sid}').status_code == 404
     assert client.get('/api/surveys/99999').status_code == 404
+
+
+def test_list_sort_order(client, monkeypatch):
+    freeze(monkeypatch, 2026, 11, 11)
+    login(client)
+    create(client, title='상시', deadline='')
+    create(client, title='먼 마감', deadline='2026-12-01')
+    create(client, title='오래전 마감', deadline='2026-10-01')
+    create(client, title='임박', deadline='2026-11-12')
+    create(client, title='최근 마감', deadline='2026-11-10')
+    create(client, title='오늘 마감', deadline='2026-11-11')
+    titles = [s['title'] for s in client.get('/api/surveys').get_json()]
+    assert titles == ['오늘 마감', '임박', '먼 마감', '상시', '최근 마감', '오래전 마감']
+
+
+def test_list_ties_newest_first(client):
+    login(client)
+    a = create(client, title='먼저', deadline='')
+    b = create(client, title='나중', deadline='')
+    ids = [s['id'] for s in client.get('/api/surveys').get_json()]
+    assert ids == [b['id'], a['id']]
+
+
+def test_list_hides_private_unless_admin_asks(client):
+    login(client)
+    create(client, title='공개')
+    create(client, title='비공개', is_public=False)
+    assert len(client.get('/api/surveys').get_json()) == 1
+    assert len(client.get('/api/surveys?include_private=true').get_json()) == 2
+    logout(client)
+    assert [s['title'] for s in client.get('/api/surveys?include_private=true').get_json()] == ['공개']
+
+
+def test_update(client):
+    assert client.put('/api/surveys/1', json=GOOD).status_code == 401
+    login(client, 'sub')
+    sid = create(client, is_public=False)['id']
+    res = client.put(f'/api/surveys/{sid}', json={**GOOD, 'title': '바뀐 제목', 'deadline': '', 'is_public': False})
+    assert res.status_code == 200
+    data = res.get_json()['data']
+    assert data['title'] == '바뀐 제목' and data['deadline'] is None and data['is_public'] is False
+    assert client.put(f'/api/surveys/{sid}', json={**GOOD, 'link_url': 'javascript:1'}).status_code == 400
+    assert client.put(f'/api/surveys/{sid}', json={'title': '  '}).status_code == 400
+    assert client.get(f'/api/surveys/{sid}').get_json()['title'] == '바뀐 제목'
+    assert client.put('/api/surveys/99999', json=GOOD).status_code == 404
+
+
+def test_update_keeps_is_public_when_omitted(client):
+    login(client)
+    sid = create(client, is_public=False)['id']
+    body = {k: v for k, v in GOOD.items() if k != 'is_public'}
+    assert client.put(f'/api/surveys/{sid}', json=body).get_json()['data']['is_public'] is False
+
+
+def test_delete_permissions(client):
+    login(client)
+    sid = create(client)['id']
+    logout(client)
+    assert client.delete(f'/api/surveys/{sid}').status_code == 401
+    login(client, 'sub')
+    assert client.delete(f'/api/surveys/{sid}').status_code == 403
+    login(client, 'master')
+    assert client.delete(f'/api/surveys/{sid}').status_code == 200
+    assert client.get(f'/api/surveys/{sid}').status_code == 404
