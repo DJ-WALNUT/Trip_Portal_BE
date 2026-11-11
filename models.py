@@ -82,3 +82,46 @@ class SiteSetting(db.Model):
     value = db.Column(db.Text, nullable=False)
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(KST))
     updated_by = db.Column(db.String(20))
+
+
+def today_kst():
+    """한국 시간 기준 오늘 날짜."""
+    return datetime.now(KST).date()
+
+
+# 6. 설문조사 테이블
+class Survey(db.Model):
+    __tablename__ = 'surveys'
+
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    link_url = db.Column(db.String(500), nullable=False)
+    deadline = db.Column(db.Date)            # 비어 있으면 상시
+    duration = db.Column(db.String(30))      # 예상 소요시간
+    reward = db.Column(db.String(50))        # 보상
+    author = db.Column(db.String(50), default='여정 학생회')
+    views = db.Column(db.Integer, default=0)
+    is_public = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(KST))
+
+    @property
+    def is_closed(self):
+        # 마감일 당일(KST)까지는 진행중
+        return self.deadline is not None and today_kst() > self.deadline
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'title': self.title,
+            'content': self.content,
+            'link_url': self.link_url,
+            'deadline': self.deadline.strftime('%Y-%m-%d') if self.deadline else None,
+            'duration': self.duration,
+            'reward': self.reward,
+            'author': self.author,
+            'views': self.views,
+            'is_public': self.is_public,
+            'date': self.created_at.strftime('%Y-%m-%d'),
+            'is_closed': self.is_closed,
+        }
