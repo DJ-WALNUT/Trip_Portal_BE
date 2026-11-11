@@ -85,7 +85,7 @@ def _sort_key(survey):
 
 # --- 목록 조회 (GET) ---
 @survey_bp.route('', methods=['GET'])
-@limiter.limit("30 per minute")
+@limiter.limit("70 per minute")
 def get_surveys():
     query = Survey.query.filter_by(is_public=True)
     # 관리자가 명시적으로 요청했을 때만 비공개 포함
@@ -98,7 +98,7 @@ def get_surveys():
 
 # --- 상세 조회 + 조회수 증가 (GET) ---
 @survey_bp.route('/<int:id>', methods=['GET'])
-@limiter.limit("30 per minute")
+@limiter.limit("70 per minute")
 def get_survey_detail(id):
     survey = db.session.get(Survey, id)
     # 비공개 글은 관리자에게만 보인다
