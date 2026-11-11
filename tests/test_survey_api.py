@@ -185,3 +185,16 @@ def test_delete_permissions(client):
     login(client, 'master')
     assert client.delete(f'/api/surveys/{sid}').status_code == 200
     assert client.get(f'/api/surveys/{sid}').status_code == 404
+
+
+def test_is_public_must_be_boolean(client):
+    login(client)
+    for bad in ['false', 'true', 0, None, 'no']:
+        res = client.post('/api/surveys', json={**GOOD, 'is_public': bad})
+        assert res.status_code == 400, bad
+        assert res.get_json()['error'] == '공개 여부 값이 올바르지 않습니다.'
+    sid = create(client, is_public=False)['id']
+    assert client.put(f'/api/surveys/{sid}', json={'is_public': 'false'}).status_code == 400
+    assert client.put(f'/api/surveys/{sid}', json={'is_public': None}).status_code == 400
+    assert client.get(f'/api/surveys/{sid}').get_json()['is_public'] is False
+    assert client.put(f'/api/surveys/{sid}', json={'is_public': True}).get_json()['data']['is_public'] is True

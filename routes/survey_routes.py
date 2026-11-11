@@ -12,6 +12,7 @@ ERR_REQUIRED = '제목, 내용, 설문 링크는 필수입니다.'
 ERR_LINK = '설문 링크는 http:// 또는 https://로 시작해야 합니다.'
 ERR_DATE = '마감일은 YYYY-MM-DD 형식으로 입력해주세요.'
 ERR_LENGTH = '입력 길이를 초과했습니다.'
+ERR_PUBLIC = '공개 여부 값이 올바르지 않습니다.'
 
 REQUIRED = ('title', 'content', 'link_url')
 OPTIONAL_TEXT = ('duration', 'reward')
@@ -64,7 +65,10 @@ def parse_survey_payload(data, partial=False):
                 return None, ERR_DATE
 
     if 'is_public' in data:
-        fields['is_public'] = bool(data['is_public'])
+        # 문자열 "false" 등이 True로 바뀌어 비공개 글이 공개되지 않도록 불리언만 받는다
+        if not isinstance(data['is_public'], bool):
+            return None, ERR_PUBLIC
+        fields['is_public'] = data['is_public']
     elif not partial:
         fields['is_public'] = True
 
